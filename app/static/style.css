@@ -138,6 +138,7 @@ html, body {
   text-align: center;
 }
 
+
 .history-item {
   padding: 9px 10px;
   border-radius: var(--radius-sm);
@@ -425,6 +426,7 @@ html, body {
 /* Skipped / error */
 .agent-card.skipped,
 .agent-card.error { opacity: 0.3; }
+
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1;   transform: scale(1); }

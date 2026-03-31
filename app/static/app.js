@@ -329,9 +329,7 @@ function handleEvent(ev) {
       // Meta
       renderMeta(ev.total_time, ev.quality);
 
-      // Status
-      const t = ev.total_time ? ` · ${ev.total_time}s` : '';
-      setStatus(`Done${t}`, true);
+      setStatus('Done', true);
 
       // Re-enable input
       isRunning = false;
@@ -472,6 +470,7 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
 
 /* ── Init ────────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {

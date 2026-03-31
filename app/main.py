@@ -241,9 +241,34 @@ async def run_query(request: Request, body: QueryRequest):
             FETCH_TIMEOUT = 25
 
             _web_mode = agent_queries.get("web_mode", "general")
+
+            def _fetch_arxiv_timed(query):
+                """ArXiv with a hard 10s cap — data-driven: 42% of queries exceed 25s global wall.
+                Fast responses (under 10s) still contribute. Slow ones capped cleanly.
+                Cap visible in logs for post-deploy verification."""
+                import time as _time
+                from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TE
+                _t0 = _time.perf_counter()
+                _ex = _TPE(max_workers=1)
+                _f = _ex.submit(fetch_arxiv_enhanced, query)
+                try:
+                    result = _f.result(timeout=10)
+                    _elapsed = _time.perf_counter() - _t0
+                    print(f"    [arxiv-cap] completed in {_elapsed:.1f}s (under 10s cap) ✓", flush=True)
+                    return result
+                except _TE:
+                    _elapsed = _time.perf_counter() - _t0
+                    print(f"    [arxiv-cap] TIMEOUT at {_elapsed:.1f}s — 10s cap hit, skipped", flush=True)
+                    return {"status": "TIMEOUT", "text": ""}
+                except Exception as _e:
+                    print(f"    [arxiv-cap] ERROR: {_e}", flush=True)
+                    return {"status": "ERROR", "text": "", "error": str(_e)}
+                finally:
+                    _ex.shutdown(wait=False)
+
             fetchers = {
                 "wikipedia": (fetch_wikipedia_article,                        wiki_feed),
-                "arxiv":     (fetch_arxiv_enhanced,                           agent_queries["arxiv"]),
+                "arxiv":     (_fetch_arxiv_timed,                             agent_queries["arxiv"]),
                 "web":       (lambda q: fetch_web(q, web_mode=_web_mode),     agent_queries["web"]),
                 "youtube":   (fetch_youtube,                                  agent_queries["youtube"]),
             }
