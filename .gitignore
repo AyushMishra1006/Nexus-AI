@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment variables — NEVER commit API keys
+.env
+*.env
+
+# Logs and query data
+logs/
+app/query_logs/
+*.log
+
+# Model cache
+.cache/
+fastembed_cache/
+models/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Office temp files
+~$*
+
+# Testing phase artifacts — internal only
+testing/
+requirements_phase*.txt
+
+# Dev / session documentation — internal working notes, not for GitHub
+CLAUDE.md
+STATUS.md
+UPDATES.md
+CODE.md
+TESTING_PLAN.md
+RISKTOKEEPINMIND.md
+PERFORMANCE_ANALYSIS.md
+HOW_IT_WORKS.md
+
+# Dev backup files
+*_v1_test.*
+*_test.html
+
+# Scratch scripts
+generate_rag_doc.py
+pipeline_3d_viz.html
+
+# Duplicate / internal requirements
+app/requirements.txt
+
+# Broken pip artifacts
+=*
+
+# Large files
+*.docx
+*.pdf

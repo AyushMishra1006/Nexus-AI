@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus AI — Research Synthesis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none">
+            <circle cx="10" cy="10" r="3.5" fill="#00d97e"/>
+            <circle cx="3"  cy="3"  r="1.5" fill="#00d97e" opacity="0.45"/>
+            <circle cx="17" cy="3"  r="1.5" fill="#00d97e" opacity="0.45"/>
+            <circle cx="3"  cy="17" r="1.5" fill="#00d97e" opacity="0.45"/>
+            <circle cx="17" cy="17" r="1.5" fill="#00d97e" opacity="0.45"/>
+            <line x1="10" y1="10" x2="3"  y2="3"  stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+            <line x1="10" y1="10" x2="17" y2="3"  stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+            <line x1="10" y1="10" x2="3"  y2="17" stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+            <line x1="10" y1="10" x2="17" y2="17" stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+          </svg>
+        </div>
+        <span class="logo-text">Nexus <span class="logo-ai">AI</span></span>
+      </div>
+      <button class="new-btn" onclick="newQuery()" title="New query">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="sidebar-label">Recent searches</div>
+
+    <div class="history-list" id="history-list">
+      <div class="history-empty" id="history-empty">No history yet</div>
+    </div>
+  </aside>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Nexus AI centre brand header -->
+    <div class="main-header">
+      <div class="main-header-brand">
+        <div class="main-header-icon">
+          <svg viewBox="0 0 20 20" width="14" height="14" fill="none">
+            <circle cx="10" cy="10" r="3.5" fill="#00d97e"/>
+            <circle cx="3"  cy="3"  r="1.5" fill="#00d97e" opacity="0.45"/>
+            <circle cx="17" cy="3"  r="1.5" fill="#00d97e" opacity="0.45"/>
+            <circle cx="3"  cy="17" r="1.5" fill="#00d97e" opacity="0.45"/>
+            <circle cx="17" cy="17" r="1.5" fill="#00d97e" opacity="0.45"/>
+            <line x1="10" y1="10" x2="3"  y2="3"  stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+            <line x1="10" y1="10" x2="17" y2="3"  stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+            <line x1="10" y1="10" x2="3"  y2="17" stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+            <line x1="10" y1="10" x2="17" y2="17" stroke="#00d97e" stroke-width="0.8" opacity="0.35"/>
+          </svg>
+        </div>
+        <span class="main-header-text">Nexus <span class="main-header-ai">AI</span></span>
+      </div>
+    </div>
+
+    <!-- Radial glow (uizard signature) -->
+    <div class="bg-glow"></div>
+
+    <div class="scroll-area" id="scroll-area">
+
+      <!-- Welcome state -->
+      <div class="welcome" id="welcome">
+        <div class="welcome-badge">Research Synthesis Engine</div>
+        <h1 class="welcome-title">Ask anything.<br><span class="gradient-text">Get synthesis.</span></h1>
+        <p class="welcome-sub">Searches Wikipedia, ArXiv, the web, and YouTube — then synthesizes a sourced answer in seconds.</p>
+        <div class="example-chips">
+          <button class="chip" onclick="setQuery('What is retrieval augmented generation?')">What is retrieval augmented generation?</button>
+          <button class="chip" onclick="setQuery('How does RLHF training work in LLMs?')">How does RLHF training work in LLMs?</button>
+          <button class="chip" onclick="setQuery('Latest advances in AI alignment?')">Latest advances in AI alignment?</button>
+          <button class="chip" onclick="setQuery('How do transformer attention heads work?')">How do transformer attention heads work?</button>
+        </div>
+      </div>
+
+      <!-- Response area -->
+      <div class="response-area hidden" id="response-area">
+
+        <div class="query-echo" id="query-echo"></div>
+
+        <!-- Agent cards -->
+        <div class="agents-grid" id="agents-grid">
+          <div class="agent-card" id="agent-wikipedia">
+            <div class="agent-top">
+              <div class="agent-icon">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+              </div>
+              <div class="agent-dot" id="agent-wikipedia-dot"></div>
+            </div>
+            <div class="agent-status" id="agent-wikipedia-status">Waiting</div>
+            <div class="agent-detail" id="agent-wikipedia-detail"></div>
+          </div>
+
+          <div class="agent-card" id="agent-arxiv">
+            <div class="agent-top">
+              <div class="agent-icon">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              </div>
+              <div class="agent-dot" id="agent-arxiv-dot"></div>
+            </div>
+            <div class="agent-status" id="agent-arxiv-status">Waiting</div>
+            <div class="agent-detail" id="agent-arxiv-detail"></div>
+          </div>
+
+          <div class="agent-card" id="agent-web">
+            <div class="agent-top">
+              <div class="agent-icon">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </div>
+              <div class="agent-dot" id="agent-web-dot"></div>
+            </div>
+            <div class="agent-status" id="agent-web-status">Waiting</div>
+            <div class="agent-detail" id="agent-web-detail"></div>
+          </div>
+
+          <div class="agent-card" id="agent-youtube">
+            <div class="agent-top">
+              <div class="agent-icon">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <div class="agent-dot" id="agent-youtube-dot"></div>
+            </div>
+            <div class="agent-status" id="agent-youtube-status">Waiting</div>
+            <div class="agent-detail" id="agent-youtube-detail"></div>
+          </div>
+        </div>
+
+        <!-- Status line -->
+        <div class="status-line" id="status-line">
+          <span class="status-pulse" id="status-pulse"></span>
+          <span id="status-text">Starting...</span>
+        </div>
+
+        <!-- Error -->
+        <div class="error-banner hidden" id="error-banner"></div>
+
+        <!-- Answer -->
+        <div class="answer-card hidden" id="answer-card">
+          <div class="answer-body" id="answer-body"></div>
+
+          <div class="sources-section">
+            <button class="sources-toggle" id="sources-toggle" onclick="toggleSources()">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              View Sources
+              <svg class="chevron" id="sources-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <div class="sources-panel hidden" id="sources-panel"></div>
+          </div>
+
+          <div class="answer-meta" id="answer-meta"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Input bar ──────────────────────────────────────────────────── -->
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea
+          id="query-input"
+          class="query-input"
+          placeholder="Ask a research question..."
+          rows="1"
+        ></textarea>
+        <button id="run-btn" class="run-btn" onclick="runQuery()" disabled>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="19" x2="12" y2="5"/>
+            <polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      </div>
+      <p class="input-hint">Enter to search &nbsp;·&nbsp; Shift+Enter for new line</p>
+    </div>
+
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
