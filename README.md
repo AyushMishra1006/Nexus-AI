@@ -2,6 +2,7 @@
 
 <img width="1916" height="971" alt="image" src="https://github.com/user-attachments/assets/2db1ff4c-6b3f-410e-a03d-9b3e7b6dce93" />
 
+<img width="1919" height="966" alt="image" src="https://github.com/user-attachments/assets/3d49166b-5a8f-48c3-a04d-e2ceabfa9057" />
 
 A production-grade RAG pipeline that answers research questions by coordinating four specialised AI agents in parallel — each targeting a different knowledge source — then synthesising a single sourced, attributed answer via Gemini 2.5 Flash.
 
@@ -125,7 +126,7 @@ Validated across 34 real queries (local pipeline, post all fixes):
 
 *ArXiv rate-limits cloud datacenter IPs. Hard 10s cap ensures fast responses contribute without dragging pipeline speed.
 
-<img width="1919" height="966" alt="image" src="https://github.com/user-attachments/assets/3d49166b-5a8f-48c3-a04d-e2ceabfa9057" />
+
 
 
 ---
