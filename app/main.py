@@ -486,10 +486,11 @@ async def run_query(request: Request, body: QueryRequest):
                             emit("llm_token", token=token)
                     break  # success
                 except Exception as e:
-                    if "429" in str(e) and attempt < len(delays):
+                    retryable = "429" in str(e) or "503" in str(e) or "UNAVAILABLE" in str(e)
+                    if retryable and attempt < len(delays):
                         wait_s = delays[attempt]
                         emit("llm_retry", attempt=attempt + 1, wait=wait_s,
-                             message=f"Rate limited — retrying in {wait_s}s")
+                             message=f"Gemini busy — retrying in {wait_s}s")
                         time.sleep(wait_s)
                         full_answer = ""
                     else:

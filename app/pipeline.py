@@ -210,9 +210,10 @@ def call_llm(prompt: str) -> tuple:
                 text = "[LLM returned empty response]"
             return text, time.perf_counter() - t0
         except Exception as e:
-            if "429" in str(e) and attempt < len(delays):
+            retryable = "429" in str(e) or "503" in str(e) or "UNAVAILABLE" in str(e)
+            if retryable and attempt < len(delays):
                 wait = delays[attempt]
-                print(f"    ⚠ Gemini 429 — waiting {wait}s (retry {attempt+1}/{len(delays)}) ...")
+                print(f"    ⚠ Gemini busy ({type(e).__name__}) — waiting {wait}s (retry {attempt+1}/{len(delays)}) ...")
                 time.sleep(wait)
             else:
                 return f"[LLM ERROR: {e}]", time.perf_counter() - t0
