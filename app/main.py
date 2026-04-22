@@ -116,6 +116,9 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+_SRC_SHORT      = {"wikipedia": "wiki", "arxiv": "arxiv", "web": "web", "youtube": "yt"}
+_SRC_STATUS_MAP = {"ERROR": "failed", "TIMEOUT": "timeout", "SKIPPED": "skipped"}
+
 
 # ── Fix 2: Pre-load models at startup (with timeouts) ──────────────────────────
 @app.on_event("startup")
@@ -182,8 +185,11 @@ async def run_query(request: Request, body: QueryRequest):
         asyncio.run_coroutine_threadsafe(q.put(payload), loop)
 
     def run_pipeline():
-        log_lines   = []
-        result_data = {
+        log_lines       = []
+        llm_retry_count = 0
+        avg_sim         = None
+        min_sim         = None
+        result_data     = {
             "query_id":  query_id,
             "query":     query,
             "timestamp": datetime.now().isoformat(),
@@ -439,6 +445,10 @@ async def run_query(request: Request, body: QueryRequest):
             if floored:
                 final = floored
 
+            sim_scores = [float(r["sim"]) for r in final]
+            avg_sim    = round(sum(sim_scores) / len(sim_scores), 4) if sim_scores else None
+            min_sim    = round(min(sim_scores), 4) if sim_scores else None
+
             retrieve_summary = {
                 src: len([r for r in final
                           if r["chunk"].get("source") == src])
@@ -470,10 +480,11 @@ async def run_query(request: Request, body: QueryRequest):
             emit("step_start", step="llm",
                  message="Gemini 2.5 Flash generating answer (streaming)...")
 
-            t_llm      = time.perf_counter()
-            llm_model  = load_llm()
-            full_answer = ""
-            delays      = [5, 15, 45]
+            t_llm           = time.perf_counter()
+            llm_model       = load_llm()
+            full_answer     = ""
+            delays          = [5, 15, 45]
+            llm_retry_count = 0
 
             for attempt in range(len(delays) + 1):
                 try:
@@ -492,6 +503,7 @@ async def run_query(request: Request, body: QueryRequest):
                         emit("llm_retry", attempt=attempt + 1, wait=wait_s,
                              message=f"Gemini busy — retrying in {wait_s}s")
                         time.sleep(wait_s)
+                        llm_retry_count += 1
                         full_answer = ""
                     else:
                         raise
@@ -547,16 +559,16 @@ async def run_query(request: Request, body: QueryRequest):
                 encoding="utf-8"
             )
 
-            # ── Supabase inserts (non-blocking — failure never crashes the query) ──
+            # ── Supabase inserts — each table independent so one failure never blocks others ──
             if _supabase:
-                try:
-                    timing = result_data.get("timing", {})
-                    src_statuses = result_data["steps"].get("fetch", {}).get("sources", {})
-                    succeeded = [s for s, d in src_statuses.items()
-                                 if d.get("status") not in ("ERROR", "TIMEOUT", "SKIPPED")]
-                    failed    = [s for s, d in src_statuses.items()
-                                 if d.get("status") in ("ERROR", "TIMEOUT")]
+                timing       = result_data.get("timing", {})
+                src_statuses = result_data["steps"].get("fetch", {}).get("sources", {})
+                succeeded    = [s for s, d in src_statuses.items()
+                                if d.get("status") not in ("ERROR", "TIMEOUT", "SKIPPED")]
+                failed       = [s for s, d in src_statuses.items()
+                                if d.get("status") in ("ERROR", "TIMEOUT")]
 
+                try:
                     _supabase.table("query_logs").insert({
                         "query_id":          query_id,
                         "user_id":           user_id,
@@ -571,8 +583,44 @@ async def run_query(request: Request, body: QueryRequest):
                         "sources_failed":    failed,
                         "quality":           quality,
                         "answer_text":       full_answer,
+                        "error_log":         None,
                     }).execute()
+                except Exception as e:
+                    print(f"  [db] WARNING: query_logs insert failed: {e}")
 
+                try:
+                    _supabase.table("query_metrics").insert({
+                        "query_id":        query_id,
+                        "llm_retry_count": llm_retry_count,
+                        "avg_sim_score":   avg_sim,
+                        "min_sim_score":   min_sim,
+                        "web_mode":        _web_mode,
+                        "wiki_skipped":    source_summary.get("wikipedia", {}).get("status") == "SKIPPED",
+                        "arxiv_skipped":   source_summary.get("arxiv", {}).get("status") == "SKIPPED",
+                    }).execute()
+                except Exception as e:
+                    print(f"  [db] WARNING: query_metrics insert failed: {e}")
+
+                try:
+                    # arrived_at = wall time since pipeline start when this source completed.
+                    # Not exact per-source fetch duration but the best available signal.
+                    source_rows = [
+                        {
+                            "query_id":     query_id,
+                            "source":       _SRC_SHORT.get(src, src),
+                            "status":       _SRC_STATUS_MAP.get(summary.get("status", ""), "success"),
+                            "chunks_count": per_src_chunks.get(src, 0),
+                            "fetch_time":   summary.get("arrived_at"),
+                            "fallback_used": None,
+                        }
+                        for src, summary in source_summary.items()
+                    ]
+                    if source_rows:
+                        _supabase.table("query_sources").insert(source_rows).execute()
+                except Exception as e:
+                    print(f"  [db] WARNING: query_sources insert failed: {e}")
+
+                try:
                     _supabase.table("user_history").insert({
                         "user_id":      user_id,
                         "query_id":     query_id,
@@ -582,8 +630,8 @@ async def run_query(request: Request, body: QueryRequest):
                         "total_time":   total_time,
                         "quality":      quality,
                     }).execute()
-                except Exception as _db_err:
-                    print(f"  [db] WARNING: Supabase insert failed: {_db_err}")
+                except Exception as e:
+                    print(f"  [db] WARNING: user_history insert failed: {e}")
 
             emit("answer", sources=sources_used, chunks=chunks_for_ui)
             emit("done",
