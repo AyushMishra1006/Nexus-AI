@@ -52,7 +52,7 @@ import time
 import textwrap
 import numpy as np
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, wait, ALL_COMPLETED
 from datetime import datetime, date
 from pathlib import Path
 from dotenv import load_dotenv
@@ -320,7 +320,7 @@ User question: {query}"""
     _stop = {"what", "how", "why", "when", "where", "who", "which", "is", "are",
              "does", "do", "the", "a", "an", "and", "or", "in", "of", "to", "for",
              "work", "works", "working", "latest", "approaches", "tell", "me",
-             "about", "define", "describe", "give", "list", "explain", "explain"}
+             "about", "define", "describe", "give", "list", "explain"}
     kw           = [w for w in re.sub(r'[?!.,]', '', query.lower()).split() if w not in _stop]
     wiki_fallback = " ".join(kw) if kw else query
     print(f"    ⚠ Using keyword fallback: wikipedia='{wiki_fallback}', others=original query")
@@ -645,6 +645,31 @@ def fetch_arxiv_enhanced(query: str) -> dict:
         return _base_fetch(query)
 
 
+def _fetch_arxiv_timed(query: str) -> dict:
+    """ArXiv with a hard 10s cap — data-driven: 42% of queries exceed 25s global wall.
+    Fast responses (under 10s) still contribute. Slow ones capped cleanly.
+    Cap visible in logs for post-deploy verification.
+    Single source of truth — imported by main.py (DRY fix).
+    """
+    t0 = time.perf_counter()
+    ex = ThreadPoolExecutor(max_workers=1)
+    f  = ex.submit(fetch_arxiv_enhanced, query)
+    try:
+        result  = f.result(timeout=10)
+        elapsed = time.perf_counter() - t0
+        print(f"    [arxiv-cap] completed in {elapsed:.1f}s (under 10s cap) ✓", flush=True)
+        return result
+    except FuturesTimeoutError:
+        elapsed = time.perf_counter() - t0
+        print(f"    [arxiv-cap] TIMEOUT at {elapsed:.1f}s — 10s cap hit, skipped", flush=True)
+        return {"status": "TIMEOUT", "text": ""}
+    except Exception as e:
+        print(f"    [arxiv-cap] ERROR: {e}", flush=True)
+        return {"status": "ERROR", "text": "", "error": str(e)}
+    finally:
+        ex.shutdown(wait=False)
+
+
 # ── Production Fix 1: Parallel fetching ──────────────────────────────────────
 
 def fetch_all_parallel(agent_queries: dict) -> dict:
@@ -669,30 +694,6 @@ def fetch_all_parallel(agent_queries: dict) -> dict:
     print(f" {time.perf_counter()-t_title:.1f}s")
 
     _web_mode = agent_queries.get("web_mode", "general")
-
-    def _fetch_arxiv_timed(query):
-        """ArXiv with a hard 10s cap — data-driven: 42% of queries exceed 25s global wall.
-        Fast responses (under 10s) still contribute. Slow ones (Semantic Scholar 429 +
-        slow fallback) capped cleanly. Cap visible in logs for post-deploy verification."""
-        import time as _time
-        from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TE
-        _t0 = _time.perf_counter()
-        _ex = _TPE(max_workers=1)
-        _f = _ex.submit(fetch_arxiv_enhanced, query)
-        try:
-            result = _f.result(timeout=10)
-            _elapsed = _time.perf_counter() - _t0
-            print(f"    [arxiv-cap] completed in {_elapsed:.1f}s (under 10s cap) ✓", flush=True)
-            return result
-        except _TE:
-            _elapsed = _time.perf_counter() - _t0
-            print(f"    [arxiv-cap] TIMEOUT at {_elapsed:.1f}s — 10s cap hit, skipped", flush=True)
-            return {"status": "TIMEOUT", "text": ""}
-        except Exception as _e:
-            print(f"    [arxiv-cap] ERROR: {_e}", flush=True)
-            return {"status": "ERROR", "text": "", "error": str(_e)}
-        finally:
-            _ex.shutdown(wait=False)
 
     fetchers = {
         "wikipedia": (fetch_wikipedia_article,                              wiki_ranked),
@@ -827,17 +828,6 @@ def chunk_all(query: str, fetch_results: dict) -> list:
 
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
-
-def semantic_retrieve(query: str, chunks: list, embs: np.ndarray, k: int) -> list:
-    """Top-k by cosine similarity. bge-s already L2-normalised → dot product = cosine."""
-    q_emb = embed_texts([query])[0]
-    sims  = embs @ q_emb
-    idxs  = np.argsort(sims)[::-1][:k]
-    return [
-        {"rank": r + 1, "chunk": chunks[i], "sim": float(sims[i])}
-        for r, i in enumerate(idxs)
-    ]
-
 
 # ── Production Fix 3: Source diversity cap ────────────────────────────────────
 
@@ -1216,7 +1206,7 @@ def run_pipeline_query(query: str, lines: list) -> dict:
     _log(f"\n{'─'*70}")
     _log(f"STEP 5 — PER-SOURCE RETRIEVAL  (top-{TOP_PER_SOURCE} per source)")
     _log(f"{'─'*70}")
-    _log(f"  Retrieval query  : \"{query}\"  (original — used for similarity scoring)")
+    _log(f"  Retrieval query  : \"{retrieval_query}\"  (rewritten — used for similarity scoring)")
     _log(f"  Total retrieved  : {len(retrieved)} chunks across all sources")
 
     # Group by source for detailed logging

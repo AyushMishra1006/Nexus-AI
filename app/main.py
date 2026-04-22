@@ -7,11 +7,8 @@ Fixes applied:
            (overlaps embed with fetch instead of waiting for all 4 sources)
   Fix 4 — Stream Gemini tokens to frontend (first words appear ~2s after LLM starts)
 
-Threading safety note:
-  SentenceTransformer.encode() is NOT thread-safe for concurrent calls on the same model.
-  _embed_lock ensures only one thread uses bge-s at a time.
-  chunk_source() for web/youtube calls embed_texts() internally (semantic_topic_shift).
-  The lock wraps the entire chunk+embed block per source to cover both calls.
+Threading: FastEmbed (ONNX Runtime) is thread-safe — no lock required.
+Pipeline threads run in a bounded ThreadPoolExecutor (max_workers=3).
 """
 
 import asyncio
@@ -19,8 +16,8 @@ import json
 import numpy as np
 import os
 import sys
-import threading
 import time
+import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from datetime import datetime, date
@@ -75,6 +72,7 @@ from pipeline import (
     select_wikipedia_title,
     fetch_wikipedia_article,
     fetch_arxiv_enhanced,
+    _fetch_arxiv_timed,
     chunk_source,
     apply_token_cap,
     per_source_retrieve,
@@ -87,11 +85,16 @@ from pipeline import (
     MAX_PER_SOURCE,
     FINAL_K,
     MIN_CHUNK_SIM,
+    WIKI_SIM_THRESHOLD,
 )
 from sources import fetch_web, fetch_youtube
 
 # fastembed (ONNX Runtime) is thread-safe — no lock needed.
 # Sources embed concurrently as each fetch completes.
+
+# Bounded executor: max 3 pipeline threads at once.
+# 4th request queues rather than spawning unbounded threads → predictable RAM.
+_pipeline_executor = ThreadPoolExecutor(max_workers=3)
 
 # ── App setup ───────────────────────────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent / "static"
@@ -117,7 +120,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # ── Fix 2: Pre-load models at startup (with timeouts) ──────────────────────────
 @app.on_event("startup")
 async def startup():
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     print("\n  [startup] Pre-loading bge-s embedding model...")
     try:
@@ -171,7 +174,7 @@ async def run_query(request: Request, body: QueryRequest):
         return JSONResponse({"error": "Query too long (max 500 characters)"}, status_code=413)
 
     query_id = str(uuid.uuid4())[:8]
-    loop     = asyncio.get_event_loop()
+    loop     = asyncio.get_running_loop()
     q: asyncio.Queue = asyncio.Queue()
 
     def emit(event_type: str, **kwargs):
@@ -213,8 +216,7 @@ async def run_query(request: Request, body: QueryRequest):
 
             wiki_ranked = select_wikipedia_title(agent_queries["wikipedia"])
 
-            # BUG 7 fix: skip Wikipedia if best match sim < 0.65
-            WIKI_SIM_THRESHOLD = 0.65
+            # BUG 7 fix: skip Wikipedia if best match sim < WIKI_SIM_THRESHOLD (imported from pipeline)
             wiki_feed = wiki_ranked  # what gets passed to fetch_wikipedia_article
             if wiki_ranked:
                 best_title, best_sim = wiki_ranked[0]
@@ -241,30 +243,6 @@ async def run_query(request: Request, body: QueryRequest):
             FETCH_TIMEOUT = 25
 
             _web_mode = agent_queries.get("web_mode", "general")
-
-            def _fetch_arxiv_timed(query):
-                """ArXiv with a hard 10s cap — data-driven: 42% of queries exceed 25s global wall.
-                Fast responses (under 10s) still contribute. Slow ones capped cleanly.
-                Cap visible in logs for post-deploy verification."""
-                import time as _time
-                from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _TE
-                _t0 = _time.perf_counter()
-                _ex = _TPE(max_workers=1)
-                _f = _ex.submit(fetch_arxiv_enhanced, query)
-                try:
-                    result = _f.result(timeout=10)
-                    _elapsed = _time.perf_counter() - _t0
-                    print(f"    [arxiv-cap] completed in {_elapsed:.1f}s (under 10s cap) ✓", flush=True)
-                    return result
-                except _TE:
-                    _elapsed = _time.perf_counter() - _t0
-                    print(f"    [arxiv-cap] TIMEOUT at {_elapsed:.1f}s — 10s cap hit, skipped", flush=True)
-                    return {"status": "TIMEOUT", "text": ""}
-                except Exception as _e:
-                    print(f"    [arxiv-cap] ERROR: {_e}", flush=True)
-                    return {"status": "ERROR", "text": "", "error": str(_e)}
-                finally:
-                    _ex.shutdown(wait=False)
 
             fetchers = {
                 "wikipedia": (fetch_wikipedia_article,                        wiki_feed),
@@ -616,7 +594,6 @@ async def run_query(request: Request, body: QueryRequest):
                  timing=result_data["timing"])
 
         except Exception as exc:
-            import traceback
             # Log full traceback server-side only — never send to frontend (info leak risk)
             print(f"[pipeline error] query_id={query_id}: {traceback.format_exc()}")
             emit("error", message=str(exc))
@@ -624,7 +601,7 @@ async def run_query(request: Request, body: QueryRequest):
         finally:
             asyncio.run_coroutine_threadsafe(q.put(None), loop)
 
-    threading.Thread(target=run_pipeline, daemon=True).start()
+    _pipeline_executor.submit(run_pipeline)
 
     async def generate():
         while True:

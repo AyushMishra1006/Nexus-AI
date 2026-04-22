@@ -78,16 +78,16 @@ def chars_to_tokens(n: int) -> int:
 _model = None
 
 def get_model():
-    global _model
-    if _model is None:
-        from sentence_transformers import SentenceTransformer
-        print("  [model] Loading all-MiniLM-L6-v2 ...", end="", flush=True)
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-        print(" done.")
-    return _model
+    raise RuntimeError(
+        "chunking.py get_model() called without embed_fn — MiniLM is banned. "
+        "Always pass embed_fn=embed_texts from pipeline.py to semantic_topic_shift()."
+    )
 
 def embed(texts: list) -> np.ndarray:
-    return get_model().encode(texts, convert_to_numpy=True, show_progress_bar=False)
+    raise RuntimeError(
+        "chunking.py embed() called without embed_fn — MiniLM is banned. "
+        "Always pass embed_fn=embed_texts from pipeline.py to semantic_topic_shift()."
+    )
 
 def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     a = a / (np.linalg.norm(a) + 1e-10)
