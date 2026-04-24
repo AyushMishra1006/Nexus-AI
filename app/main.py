@@ -20,7 +20,7 @@ import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 
 # ── Path setup ─────────────────────────────────────────────────────────────────
@@ -116,8 +116,14 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-_SRC_SHORT      = {"wikipedia": "wiki", "arxiv": "arxiv", "web": "web", "youtube": "yt"}
-_SRC_STATUS_MAP = {"ERROR": "failed", "TIMEOUT": "timeout", "SKIPPED": "skipped"}
+_SRC_SHORT   = {"wikipedia": "wiki", "arxiv": "arxiv", "web": "web", "youtube": "yt"}
+_STATUS_NORM = {
+    "SUCCESS": "ok",    "PARTIAL": "ok",
+    "FAILED":  "error", "ERROR":   "error", "UNKNOWN": "error",
+    "TIMEOUT": "timeout",
+    "SKIPPED": "skipped",
+    "EMPTY":   "empty",
+}
 
 
 # ── Fix 2: Pre-load models at startup (with timeouts) ──────────────────────────
@@ -185,11 +191,16 @@ async def run_query(request: Request, body: QueryRequest):
         asyncio.run_coroutine_threadsafe(q.put(payload), loop)
 
     def run_pipeline():
-        log_lines       = []
-        llm_retry_count = 0
-        avg_sim         = None
-        min_sim         = None
-        result_data     = {
+        # Safe defaults — must be initialised before the try block so the except
+        # crash-insert never hits NameError on a partial pipeline failure.
+        log_lines        = []
+        llm_retry_count  = 0
+        avg_sim          = None
+        min_sim          = None
+        rewrite_success  = True
+        _pipeline_error  = None
+        sources_json     = {}
+        result_data      = {
             "query_id":  query_id,
             "query":     query,
             "timestamp": datetime.now().isoformat(),
@@ -204,8 +215,9 @@ async def run_query(request: Request, body: QueryRequest):
             emit("step_start", step="rewrite",
                  message="Rewriting queries for each agent with Gemini...")
             t0 = time.perf_counter()
-            agent_queries = rewrite_queries_for_agents(query)
-            rewrite_time  = round(time.perf_counter() - t0, 2)
+            agent_queries   = rewrite_queries_for_agents(query)
+            rewrite_time    = round(time.perf_counter() - t0, 2)
+            rewrite_success = not agent_queries.get("_fallback", False)
             emit("step_done", step="rewrite", elapsed=rewrite_time,
                  queries=agent_queries)
             log_lines.append(f"STEP 0 — Rewrite ({rewrite_time}s)")
@@ -454,6 +466,28 @@ async def run_query(request: Request, body: QueryRequest):
                           if r["chunk"].get("source") == src])
                 for src in ["wikipedia", "arxiv", "web", "youtube"]
             }
+
+            # Build JSONB sources — one key per agent, status normalized to lowercase.
+            # Built here so all three inputs (source_summary, per_src_chunks,
+            # retrieve_summary) are fully populated.
+            sources_json = {}
+            for src, key in _SRC_SHORT.items():
+                summ   = source_summary.get(src, {})
+                status = _STATUS_NORM.get(
+                    summ.get("status", "UNKNOWN").upper(), "error"
+                )
+                arrived = (0    if status == "skipped" else
+                           None if status in ("timeout", "error") else
+                           summ.get("arrived_at"))
+                sources_json[key] = {
+                    "status":       status,
+                    "arrived_at_s": arrived,
+                    "chars":        summ.get("chars", 0),
+                    "chunks_prod":  per_src_chunks.get(src, 0),
+                    "chunks_llm":   retrieve_summary.get(src, 0),
+                    "error":        summ.get("error") or None,
+                }
+
             emit("step_done", step="retrieve",
                  per_source=retrieve_summary, total=len(final))
             log_lines.append(
@@ -559,79 +593,30 @@ async def run_query(request: Request, body: QueryRequest):
                 encoding="utf-8"
             )
 
-            # ── Supabase inserts — each table independent so one failure never blocks others ──
             if _supabase:
-                timing       = result_data.get("timing", {})
-                src_statuses = result_data["steps"].get("fetch", {}).get("sources", {})
-                succeeded    = [s for s, d in src_statuses.items()
-                                if d.get("status") not in ("ERROR", "TIMEOUT", "SKIPPED")]
-                failed       = [s for s, d in src_statuses.items()
-                                if d.get("status") in ("ERROR", "TIMEOUT")]
-
                 try:
-                    _supabase.table("query_logs").insert({
+                    _supabase.table("queries").insert({
                         "query_id":          query_id,
                         "user_id":           user_id,
                         "query_text":        query,
-                        "rewrite_time":      timing.get("rewrite"),
-                        "fetch_embed_time":  timing.get("fetch_plus_embed"),
-                        "llm_time":          timing.get("llm"),
-                        "total_time":        timing.get("total"),
-                        "chunks_produced":   total_chunks,
-                        "chunks_to_llm":     len(final),
-                        "sources_succeeded": succeeded,
-                        "sources_failed":    failed,
+                        "timestamp":         datetime.now(timezone.utc).isoformat(),
                         "quality":           quality,
-                        "answer_text":       full_answer,
+                        "total_time_s":      total_time,
+                        "rewrite_time_s":    rewrite_time,
+                        "fetch_wall_time_s": fetch_time,
+                        "llm_time_s":        llm_time,
+                        "llm_retry_count":   llm_retry_count,
+                        "rewrite_success":   rewrite_success,
+                        "web_mode":          _web_mode,
+                        "chunks_to_llm":     len(final),
+                        "avg_sim_score":     avg_sim,
+                        "min_sim_score":     min_sim,
+                        "sources":           sources_json or None,
                         "error_log":         None,
+                        "answer_text":       full_answer,
                     }).execute()
                 except Exception as e:
-                    print(f"  [db] WARNING: query_logs insert failed: {e}")
-
-                try:
-                    _supabase.table("query_metrics").insert({
-                        "query_id":        query_id,
-                        "llm_retry_count": llm_retry_count,
-                        "avg_sim_score":   avg_sim,
-                        "min_sim_score":   min_sim,
-                        "web_mode":        _web_mode,
-                        "wiki_skipped":    source_summary.get("wikipedia", {}).get("status") == "SKIPPED",
-                        "arxiv_skipped":   source_summary.get("arxiv", {}).get("status") == "SKIPPED",
-                    }).execute()
-                except Exception as e:
-                    print(f"  [db] WARNING: query_metrics insert failed: {e}")
-
-                try:
-                    # arrived_at = wall time since pipeline start when this source completed.
-                    # Not exact per-source fetch duration but the best available signal.
-                    source_rows = [
-                        {
-                            "query_id":     query_id,
-                            "source":       _SRC_SHORT.get(src, src),
-                            "status":       _SRC_STATUS_MAP.get(summary.get("status", ""), "success"),
-                            "chunks_count": per_src_chunks.get(src, 0),
-                            "fetch_time":   summary.get("arrived_at"),
-                            "fallback_used": None,
-                        }
-                        for src, summary in source_summary.items()
-                    ]
-                    if source_rows:
-                        _supabase.table("query_sources").insert(source_rows).execute()
-                except Exception as e:
-                    print(f"  [db] WARNING: query_sources insert failed: {e}")
-
-                try:
-                    _supabase.table("user_history").insert({
-                        "user_id":      user_id,
-                        "query_id":     query_id,
-                        "query_text":   query,
-                        "answer_text":  full_answer,
-                        "sources_used": sources_used,
-                        "total_time":   total_time,
-                        "quality":      quality,
-                    }).execute()
-                except Exception as e:
-                    print(f"  [db] WARNING: user_history insert failed: {e}")
+                    print(f"  [db] WARNING: queries insert failed: {e}")
 
             emit("answer", sources=sources_used, chunks=chunks_for_ui)
             emit("done",
@@ -643,9 +628,21 @@ async def run_query(request: Request, body: QueryRequest):
                  timing=result_data["timing"])
 
         except Exception as exc:
-            # Log full traceback server-side only — never send to frontend (info leak risk)
-            print(f"[pipeline error] query_id={query_id}: {traceback.format_exc()}")
+            _pipeline_error = traceback.format_exc()
+            print(f"[pipeline error] query_id={query_id}: {_pipeline_error}")
             emit("error", message=str(exc))
+            # Minimal crash row — monitoring agent uses error_log IS NOT NULL to count errors.
+            if _supabase:
+                try:
+                    _supabase.table("queries").insert({
+                        "query_id":   query_id,
+                        "user_id":    user_id,
+                        "query_text": query,
+                        "timestamp":  datetime.now(timezone.utc).isoformat(),
+                        "error_log":  _pipeline_error,
+                    }).execute()
+                except Exception as db_e:
+                    print(f"  [db] WARNING: crash row insert failed: {db_e}")
 
         finally:
             asyncio.run_coroutine_threadsafe(q.put(None), loop)
@@ -719,14 +716,17 @@ async def get_user_history(user_id: str, limit: int = 20):
         return JSONResponse({"error": "Database not configured"}, status_code=503)
     try:
         resp = (
-            _supabase.table("user_history")
-            .select("query_id, query_text, answer_text, sources_used, total_time, quality, timestamp")
+            _supabase.table("queries")
+            .select("query_id, query_text, answer_text, total_time_s, quality, timestamp")
             .eq("user_id", user_id)
             .order("timestamp", desc=True)
             .limit(limit)
             .execute()
         )
-        return JSONResponse(resp.data)
+        rows = resp.data or []
+        for row in rows:
+            row["total_time"] = row.pop("total_time_s", None)
+        return JSONResponse(rows)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 

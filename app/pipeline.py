@@ -326,12 +326,13 @@ User question: {query}"""
     wiki_fallback = " ".join(kw) if kw else query
     print(f"    ⚠ Using keyword fallback: wikipedia='{wiki_fallback}', others=original query")
     return {
-        "wikipedia":      wiki_fallback,
-        "arxiv":          query,
-        "web":            query,
-        "web_mode":       "general",
-        "youtube":        query,
+        "wikipedia":       wiki_fallback,
+        "arxiv":           query,
+        "web":             query,
+        "web_mode":        "general",
+        "youtube":         query,
         "retrieval_query": " ".join(kw) if kw else query,
+        "_fallback":       True,
     }
 
 
