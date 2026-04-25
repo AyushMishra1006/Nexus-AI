@@ -305,21 +305,21 @@ def _build_email_body(
 
 
 def send_email(subject: str, body: str) -> None:
-    sender   = os.environ["GMAIL_SENDER"]
-    receiver = os.environ["GMAIL_RECEIVER"]
-    password = os.environ["GMAIL_APP_PASSWORD"]
+    sender    = os.environ["GMAIL_SENDER"]
+    receivers = [r.strip() for r in os.environ["GMAIL_RECEIVER"].split(",")]
+    password  = os.environ["GMAIL_APP_PASSWORD"]
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = sender
-    msg["To"]      = receiver
+    msg["To"]      = ", ".join(receivers)
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
     with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
         smtp.ehlo()
         smtp.starttls()
         smtp.login(sender, password)
-        smtp.sendmail(sender, receiver, msg.as_string())
+        smtp.sendmail(sender, receivers, msg.as_string())
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
