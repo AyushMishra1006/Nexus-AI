@@ -179,7 +179,7 @@ html, body {
   min-width: 0;
   overflow: hidden;
   position: relative;
-  background-image: radial-gradient(circle, rgba(0,217,126,0.045) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(0,217,126,0.09) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 

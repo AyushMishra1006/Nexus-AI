@@ -273,7 +273,7 @@ function handleEvent(ev) {
         setAgentCard(src, 'skipped', AGENTS[src].skipped);
       } else if (status === 'TIMEOUT') {
         setAgentCard(src, 'timeout', AGENTS[src].timeout);
-      } else if (status === 'ERROR') {
+      } else if (status === 'ERROR' || status === 'FAILED' || status === 'UNKNOWN') {
         setAgentCard(src, 'error', AGENTS[src].error);
       } else {
         setAgentCard(src, 'fetching', AGENTS[src].fetch);
@@ -375,6 +375,13 @@ function handleEvent(ev) {
 
 function onStreamEnd() {
   if (isRunning) {
+    // Safety sweep — stop any card still blinking when stream closes
+    Object.keys(AGENTS).forEach(src => {
+      const card = $(`agent-${src}`);
+      if (card && card.classList.contains('fetching')) {
+        setAgentCard(src, 'timeout', AGENTS[src].timeout);
+      }
+    });
     isRunning = false;
     runBtn.disabled = !inputEl.value.trim();
     $('answer-body').classList.remove('streaming');
