@@ -21,24 +21,28 @@ const AGENTS = {
     done:     'Knowledge base ready',
     skipped:  'Not applicable',
     error:    'Unavailable',
+    timeout:  'Timed out',
   },
   arxiv: {
     fetch:    'Scanning research papers...',
     done:     'Papers analyzed',
     skipped:  'No relevant papers',
     error:    'Unavailable',
+    timeout:  'Timed out',
   },
   web: {
     fetch:    'Browsing the web...',
     done:     'Web sources ready',
     skipped:  'No web results',
     error:    'Unavailable',
+    timeout:  'Timed out',
   },
   youtube: {
     fetch:    'Finding explainer videos...',
     done:     'Videos processed',
     skipped:  'No relevant videos',
     error:    'Unavailable',
+    timeout:  'Timed out',
   },
 };
 
@@ -109,7 +113,7 @@ function showHistoryItem(item, divEl) {
   ra.classList.remove('hidden');
 
   // Fill query echo
-  $('query-echo').textContent = item.query_text || '';
+  $('query-echo').innerHTML = `<span class="query-label">Research Query</span>${escapeHtml(item.query_text || '')}`;
 
   // Hide agents + status (this is a history view, not a live run)
   $('agents-grid').classList.add('hidden');
@@ -175,7 +179,7 @@ function runQuery() {
   ra.classList.remove('hidden');
 
   // Query echo
-  $('query-echo').textContent = query;
+  $('query-echo').innerHTML = `<span class="query-label">Research Query</span>${escapeHtml(query)}`;
 
   // Reset agent cards
   Object.keys(AGENTS).forEach(src => resetAgentCard(src));
@@ -267,7 +271,9 @@ function handleEvent(ev) {
         setAgentCard(src, 'fetching', AGENTS[src].fetch);
       } else if (status === 'SKIPPED') {
         setAgentCard(src, 'skipped', AGENTS[src].skipped);
-      } else if (status === 'ERROR' || status === 'TIMEOUT') {
+      } else if (status === 'TIMEOUT') {
+        setAgentCard(src, 'timeout', AGENTS[src].timeout);
+      } else if (status === 'ERROR') {
         setAgentCard(src, 'error', AGENTS[src].error);
       } else {
         setAgentCard(src, 'fetching', AGENTS[src].fetch);
@@ -321,6 +327,14 @@ function handleEvent(ev) {
       break;
 
     case 'done': {
+      // Sweep any cards still blinking — timed out without receiving a status event
+      Object.keys(AGENTS).forEach(src => {
+        const card = $(`agent-${src}`);
+        if (card && card.classList.contains('fetching')) {
+          setAgentCard(src, 'timeout', AGENTS[src].timeout);
+        }
+      });
+
       // Render markdown
       const body = $('answer-body');
       body.classList.remove('streaming');

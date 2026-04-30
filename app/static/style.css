@@ -179,6 +179,8 @@ html, body {
   min-width: 0;
   overflow: hidden;
   position: relative;
+  background-image: radial-gradient(circle, rgba(0,217,126,0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 /* Nexus AI centre brand header */
@@ -338,13 +340,23 @@ html, body {
 
 /* ── Query echo ────────────────────────────────────────────────────────── */
 
+.query-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(0,217,126,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 7px;
+}
+
 .query-echo {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text);
-  letter-spacing: -0.03em;
-  line-height: 1.3;
-  padding-bottom: 6px;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  padding-bottom: 4px;
 }
 
 /* ── Agent cards ───────────────────────────────────────────────────────── */
@@ -426,6 +438,20 @@ html, body {
 /* Skipped / error */
 .agent-card.skipped,
 .agent-card.error { opacity: 0.3; }
+
+/* Timeout state — amber, no blink */
+.agent-card.timeout {
+  border-color: rgba(245,158,11,0.2);
+  background: rgba(245,158,11,0.03);
+  opacity: 0.55;
+}
+.agent-card.timeout .agent-icon   { color: #f59e0b; }
+.agent-card.timeout .agent-status { color: #f59e0b; }
+.agent-card.timeout .agent-detail { color: rgba(245,158,11,0.45); }
+.agent-card.timeout .agent-dot {
+  background: #f59e0b;
+  animation: none;
+}
 
 
 @keyframes pulse-dot {
