@@ -485,7 +485,7 @@ async def run_query(request: Request, body: QueryRequest):
                     "chars":        summ.get("chars", 0),
                     "chunks_prod":  per_src_chunks.get(src, 0),
                     "chunks_llm":   retrieve_summary.get(src, 0),
-                    "error":        summ.get("error") or None,
+                    "error":        (summ.get("error") or "")[:100] or None,
                 }
 
             emit("step_done", step="retrieve",

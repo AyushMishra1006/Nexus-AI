@@ -63,3 +63,18 @@ app/requirements.txt
 # Large files
 *.docx
 *.pdf
+
+# SSH keys — NEVER commit private keys
+*.pem
+*.key
+
+# Internal session/deployment docs
+AWS.md
+AWS_BEGINNER_GUIDE.md
+NEXUS_CODE_GUIDE.md
+
+# Claude Code internal files
+.claude/
+
+# Separate experimental projects
+langgraph/

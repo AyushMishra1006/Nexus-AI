@@ -41,7 +41,7 @@ const AGENTS = {
     fetch:    'Finding explainer videos...',
     done:     'Videos processed',
     skipped:  'No relevant videos',
-    error:    'Unavailable',
+    error:    'Dropped',
     timeout:  'Timed out',
   },
 };

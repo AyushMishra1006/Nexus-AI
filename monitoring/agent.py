@@ -128,8 +128,8 @@ def compute_metrics(rows: list[dict]) -> dict:
 
     for r in rows:
         for src, data in (r.get("sources") or {}).items():
-            if src not in SOURCES:
-                continue
+            if src not in SOURCES or src == "yt":
+                continue  # yt is permanently blocked on EC2 AWS IPs — never count as real failure
             if data.get("status") not in ("ok", "skipped"):
                 src_failures[src] += 1
             arrived = data.get("arrived_at_s")
@@ -181,9 +181,89 @@ def segment_rows(rows: list[dict], p30: float, p45: float, p90: float) -> dict[s
 
 
 # ── Gemini diagnosis ───────────────────────────────────────────────────────────
+_GEMINI_STRIP = frozenset({"answer_text", "user_id", "min_sim_score", "web_mode", "rewrite_success"})
+
 def _strip_for_gemini(row: dict) -> dict:
-    # answer_text excluded — see BUG C comment in fetch_rows
-    return {k: v for k, v in row.items() if k != "answer_text"}
+    return {k: v for k, v in row.items() if k not in _GEMINI_STRIP}
+
+
+# Failure fingerprinting — priority order: first matching condition wins.
+# Each outlier gets exactly one label so no failure type crowds out another.
+_FAILURE_TYPES = (
+    "CRASH",         # error_log is not null
+    "CASCADE",       # 2+ sources failed simultaneously
+    "EXTREME_SLOW",  # total_time_s > P90 × 1.5
+    "ARXIV_TIMEOUT",
+    "WIKI_TIMEOUT",
+    "WEB_TIMEOUT",
+    "LOW_SIM",       # avg_sim_score < 0.65
+    "LLM_OVERLOAD",  # llm_retry_count >= 2
+    "FAST_POOR",     # quality==POOR and time < P30 (silent failure)
+    "THIN_CONTEXT",  # chunks_to_llm <= 3 and quality==POOR
+)
+
+
+def _fingerprint_outlier(row: dict, p30: float, p90: float) -> str:
+    t       = row.get("total_time_s") or 0.0
+    quality = row.get("quality") or ""
+    chunks  = row.get("chunks_to_llm") or 0
+    sim     = row.get("avg_sim_score") or 1.0
+    retries = row.get("llm_retry_count") or 0
+    sources = row.get("sources") or {}
+
+    failed_count = sum(
+        1 for s in sources.values()
+        if s.get("status") not in ("ok", "skipped")
+    )
+
+    if row.get("error_log") is not None:                                          return "CRASH"
+    if failed_count >= CASCADE_FAIL_MIN:                                          return "CASCADE"
+    if t > p90 * P90_EXTREME_FACTOR:                                             return "EXTREME_SLOW"
+    if (sources.get("arxiv") or {}).get("status") in ("timeout", "error"):       return "ARXIV_TIMEOUT"
+    if (sources.get("wiki")  or {}).get("status") in ("timeout", "error"):       return "WIKI_TIMEOUT"
+    if (sources.get("web")   or {}).get("status") in ("timeout", "error"):       return "WEB_TIMEOUT"
+    if sim < MIN_SIM_GATE:                                                        return "LOW_SIM"
+    if retries >= MIN_RETRY_OUTLIER:                                              return "LLM_OVERLOAD"
+    if quality == "POOR" and t < p30:                                            return "FAST_POOR"
+    return "THIN_CONTEXT"
+
+
+def _count_conditions(row: dict, p30: float, p90: float) -> int:
+    """Count how many outlier conditions are true — used to pick the worst row per group."""
+    t       = row.get("total_time_s") or 0.0
+    quality = row.get("quality") or ""
+    chunks  = row.get("chunks_to_llm") or 0
+    sim     = row.get("avg_sim_score") or 1.0
+    retries = row.get("llm_retry_count") or 0
+    sources = row.get("sources") or {}
+
+    failed_count = sum(
+        1 for s in sources.values()
+        if s.get("status") not in ("ok", "skipped")
+    )
+
+    return sum([
+        row.get("error_log") is not None,
+        failed_count >= CASCADE_FAIL_MIN,
+        t > p90 * P90_EXTREME_FACTOR,
+        (sources.get("arxiv") or {}).get("status") in ("timeout", "error"),
+        (sources.get("wiki")  or {}).get("status") in ("timeout", "error"),
+        (sources.get("web")   or {}).get("status") in ("timeout", "error"),
+        sim < MIN_SIM_GATE,
+        retries >= MIN_RETRY_OUTLIER,
+        quality == "POOR" and t < p30,
+        chunks <= THIN_CONTEXT_CHUNKS and quality == "POOR",
+    ])
+
+
+def _group_outliers_by_type(
+    outliers: list[dict], p30: float, p90: float
+) -> dict[str, list[dict]]:
+    groups: dict[str, list[dict]] = {}
+    for row in outliers:
+        ftype = _fingerprint_outlier(row, p30, p90)
+        groups.setdefault(ftype, []).append(row)
+    return groups
 
 
 def gemini_diagnose(
@@ -205,10 +285,24 @@ def gemini_diagnose(
     # Exclude internal _* keys from the prompt
     prompt_metrics = {k: v for k, v in metrics.items() if not k.startswith("_")}
 
-    top_outliers   = [_strip_for_gemini(r) for r in outliers[:MAX_OUTLIER_ROWS]]
-    outlier_ids    = {r.get("query_id") for r in outliers}
-    sample_pool    = [r for r in all_rows if r.get("query_id") not in outlier_ids]
-    random_sample  = [
+    # Failure fingerprinting — one representative row per failure type (max 10 types → max 10 rows)
+    p30 = metrics["_p30"]
+    p90 = metrics["_p90"]
+    groups = _group_outliers_by_type(outliers, p30, p90)
+    fingerprinted_outliers = [
+        {
+            "failure_type":   ftype,
+            "count":          len(group_rows),
+            "representative": _strip_for_gemini(
+                max(group_rows, key=lambda r: _count_conditions(r, p30, p90))
+            ),
+        }
+        for ftype, group_rows in groups.items()
+    ]
+
+    outlier_ids   = {r.get("query_id") for r in outliers}
+    sample_pool   = [r for r in all_rows if r.get("query_id") not in outlier_ids]
+    random_sample = [
         _strip_for_gemini(r)
         for r in random.sample(sample_pool, min(SAMPLE_SIZE, len(sample_pool)))
     ]
@@ -223,10 +317,11 @@ Note: YouTube always fails on EC2 AWS IPs (blocked by YouTube for cloud datacent
 ## 7-day historical baseline
 {baseline_text}
 
-## Top outlier queries (up to {MAX_OUTLIER_ROWS}, answer_text excluded)
-{json.dumps(top_outliers, indent=2, default=str)}
+## Outlier queries — fingerprinted by failure type (one representative per type, PII stripped)
+Each entry shows the failure type, how many queries had it today, and the single worst representative row.
+{json.dumps(fingerprinted_outliers, indent=2, default=str)}
 
-## Random sample ({len(random_sample)} queries, answer_text excluded)
+## Random sample ({len(random_sample)} queries, PII stripped)
 {json.dumps(random_sample, indent=2, default=str)}
 
 Write a concise daily health report with exactly these sections:
@@ -272,8 +367,12 @@ def _build_email_body(
 ) -> str:
     m = metrics
     src_lines = "\n".join(
-        f"  {s:<5} {m['src_failures'][s]} failures | avg fetch "
-        f"{m['src_avg_time'].get(s) or 'N/A'}s"
+        "  yt    Dropped (AWS IP block — expected)"
+        if s == "yt"
+        else (
+            f"  {s:<5} {m['src_failures'][s]} failures | avg fetch "
+            + (f"{m['src_avg_time'].get(s)}s" if m['src_avg_time'].get(s) is not None else "N/A")
+        )
         for s in SOURCES
     )
 

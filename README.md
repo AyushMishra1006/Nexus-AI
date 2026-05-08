@@ -2,11 +2,11 @@
 
 <img width="1916" height="971" alt="image" src="https://github.com/user-attachments/assets/2db1ff4c-6b3f-410e-a03d-9b3e7b6dce93" />
 
-
-
 <img width="1919" height="966" alt="image" src="https://github.com/user-attachments/assets/3d49166b-5a8f-48c3-a04d-e2ceabfa9057" />
 
-A production-grade RAG pipeline that answers research questions by coordinating four specialised AI agents in parallel — each targeting a different knowledge source — then synthesising a single sourced, attributed answer via Gemini 2.5 Flash.
+A production-grade multi-agent RAG pipeline that answers research questions by coordinating four specialised AI agents in parallel — each targeting a different knowledge source — then synthesising a single sourced, attributed answer via Gemini 2.5 Flash.
+
+**Live at:** `http://13.126.112.153` — AWS EC2 t3.small, ap-south-1 (Mumbai). Nginx + systemd. Persistent Elastic IP.
 
 Built through a structured **6-phase testing framework**. Every architectural decision is data-backed and recorded before being locked in.
 
@@ -14,15 +14,16 @@ Built through a structured **6-phase testing framework**. Every architectural de
 
 ---
 
-## What it does
+## What It Does
 
 You ask a research question. The system:
 
 1. **Rewrites your query** — one Gemini call generates four agent-specific search queries, not the same query sent four times
 2. **Fetches in parallel** — four agents fire simultaneously across Wikipedia, ArXiv, Tavily Web, and YouTube
 3. **Chunks intelligently** — each source gets a strategy matched to its structure, not a one-size-fits-all token split
-4. **Embeds and retrieves** — semantic search with per-source diversity caps so no single source dominates
+4. **Embeds and retrieves** — semantic search (bge-s) with per-source diversity caps so no single source dominates
 5. **Synthesises** — Gemini receives role-grouped context and streams an attributed answer to the frontend
+6. **Logs everything** — every query row written to Supabase PostgreSQL with 17 columns of timing + quality signals
 
 ---
 
@@ -34,7 +35,7 @@ User Query
     ▼
 ┌─────────────────────────────────────┐
 │   LLM Query Rewrite (Gemini)        │  ← one call, four agent-specific queries
-│   + web_mode classification         │    + Wikipedia keyword fallback
+│   + web_mode classification         │    + Wikipedia keyword fallback on failure
 └──────────────────┬──────────────────┘
                    │
        ┌───────────┼───────────┬──────────────┐
@@ -49,7 +50,7 @@ User Query
        ▼           ▼           ▼              ▼
   Hierarchical  Atomic     Semantic       Semantic
   parent-child  (1 paper   topic-shift    topic-shift
-  chunking      = 1 chunk) + overlap      + vocab fix
+  chunking      = 1 chunk) + overlap      + overlap
        │           │           │              │
        └───────────┴───────────┴──────────────┘
                    │
@@ -69,6 +70,9 @@ User Query
                    │
                    ▼
        SSE streamed answer → frontend typewriter render
+                   │
+                   ▼
+       Supabase PostgreSQL  ← every query row logged (17 cols + JSONB sources)
 ```
 
 ---
@@ -79,12 +83,69 @@ Each agent stays in its lane through three things working together:
 
 | Agent | Query transformation | Source config | Role tag |
 |-------|---------------------|---------------|----------|
-| Wikipedia | unchanged | 1 article, section-scored vs query | `foundation` |
+| Wikipedia | unchanged | 1 article, section-scored vs query with bge-s | `foundation` |
 | ArXiv | unchanged | sort by `SubmittedDate` DESC, 10s hard cap | `research` |
-| Web | `query + year` | Tavily `topic=news`, `days=30` | `current` |
-| YouTube | `"explained tutorial " + query` | captions, top 2 videos | `explainer` |
+| Web | Tavily `topic=news`, `days=30` | Advanced crawl depth, content field only | `current` |
+| YouTube | `"explained tutorial " + query` | captions via youtube-transcript-api, top 2 | `explainer` |
 
 Every chunk carries `source`, `role`, `source_date`, `fetched_at`, `url`, `query` metadata. The LLM prompt groups context by role — it knows what kind of source it is reading before it synthesises.
+
+> **Note:** YouTube is intentionally dropped on the EC2 deployment. AWS datacenter IP ranges are permanently blocked by YouTube for caption access. The agent card shows "Dropped" — this is expected, not a system failure.
+
+---
+
+## Monitoring Agent
+
+A nightly AI health report runs automatically on EC2 via cron (`0 1 * * *` — 1am UTC / 7am IST).
+
+```
+Cron fires at 1am UTC
+        │
+        ▼
+fetch_rows()         ← last 24h from Supabase `queries` table (answer_text excluded)
+        │
+        ▼
+compute_metrics()    ← pure Python, zero AI cost
+  P30 / P45 / P65 / P90 percentiles
+  quality distribution (GOOD / OK / POOR)
+  per-source failure counts (wiki, arxiv, web — yt excluded, permanently blocked)
+  per-source avg fetch time
+  outlier detection (7 conditions)
+        │
+        ▼
+segment_rows()       ← FAST (<P30) / SLOW (P45–P90) / EXTREME (>P90)
+        │
+        ▼
+fetch_baseline()     ← last 7 rows from `daily_summaries` (historical context)
+        │
+        ▼
+gemini_diagnose()    ← failure fingerprinting + Gemini narrative
+        │
+        ▼
+write_daily_summary() ← DB write FIRST (data integrity before notification)
+        │
+        ▼
+send_email()         ← daily health report to Gmail
+```
+
+### Failure Fingerprinting
+
+Every outlier query is classified into exactly one of 10 failure types (priority order — first match wins):
+
+| Priority | Type | Condition |
+|----------|------|-----------|
+| 1 | `CRASH` | `error_log` is not null |
+| 2 | `CASCADE` | 2+ sources failed simultaneously |
+| 3 | `EXTREME_SLOW` | `total_time_s > P90 × 1.5` |
+| 4 | `ARXIV_TIMEOUT` | ArXiv status in `(timeout, error)` |
+| 5 | `WIKI_TIMEOUT` | Wikipedia status in `(timeout, error)` |
+| 6 | `WEB_TIMEOUT` | Web status in `(timeout, error)` |
+| 7 | `LOW_SIM` | `avg_sim_score < 0.65` |
+| 8 | `LLM_OVERLOAD` | `llm_retry_count >= 2` |
+| 9 | `FAST_POOR` | `quality == POOR` and `time < P30` (silent failure) |
+| 10 | `THIN_CONTEXT` | `chunks_to_llm <= 3` and `quality == POOR` |
+
+Gemini receives one representative row per type (the worst — most conditions triggered), not a random slice of 10 rows. Max 10 rows to Gemini regardless of total outlier count. This ensures every failure mode surfaces in the diagnosis, not just the most frequent one.
 
 ---
 
@@ -96,16 +157,19 @@ These were not guesses. Each was tested, measured, and locked in before moving t
 Phase 2 tested 450-char children first. Token distribution showed 115-token average — below the 150-token retrieval floor. Raised to 750 chars → 167-token average. Parent paragraphs (~1,200–1,500 chars) are what the LLM reads; children are search-only.
 
 **Embedding model — `bge-small-en-v1.5` over MiniLM and bge-base**
-Phase 3 benchmarked four models. MiniLM rejected: 256-token limit truncated 18.7% of chunks (39/209). bge-base rejected: 3× slower (6–7s vs 2.2s avg) with marginal quality gain. bge-s: 512-token limit, 2.2s avg embed, 130MB, built for retrieval. Unanimous choice.
+Phase 3 benchmarked four models. MiniLM rejected: 256-token limit truncated 18.7% of chunks (39/209). bge-base rejected: 3× slower (6–7s vs 2.2s avg) with marginal quality gain. bge-s: 512-token limit, 2.2s avg embed, 130MB, built for retrieval.
 
 **RAPTOR dropped for Wikipedia**
 Phase 2 built and tested RAPTOR (recursive abstractive clustering). Dropped: requires LLM calls during indexing, adds cost and latency at index time. Hierarchical parent-child achieves equivalent precision/context tradeoff without the overhead.
 
 **ArXiv 10s hard cap — data-driven**
-31 queries of telemetry showed ArXiv averaging 12.1s arrived time, with 42% of queries exceeding the 25s global wall due to Semantic Scholar 429s on cloud IPs. `fetch_arxiv_enhanced` now runs inside a worker thread with `future.result(timeout=10)`. Fast responses still contribute peer-reviewed context. Slow responses are skipped cleanly. Pipeline never waits more than 10s for ArXiv.
+31 queries of telemetry showed ArXiv averaging 12.1s arrived time, with 42% of queries exceeding the 25s global wall due to Semantic Scholar 429s on cloud IPs. `fetch_arxiv_enhanced` now runs inside a worker thread with `future.result(timeout=10)`. Fast responses still contribute peer-reviewed context. Slow responses are skipped cleanly.
 
 **Per-source retrieval before diversity cap**
 Early pipeline sent all chunks into one ranked list — ArXiv abstracts (short, high similarity) always won, YouTube never reached the LLM. Fixed with per-source top-4 first, then diversity cap (max 3/source), then global top-12. Every agent gets a proportional slot based on quality, not chunk size.
+
+**FastEmbed (ONNX Runtime) over SentenceTransformer**
+SentenceTransformer used `threading.Lock` — all four source threads serialised through one embedding call, 24–29s wait under `web_mode=general`. Replaced with FastEmbed ONNX: single shared instance, genuinely thread-safe, no lock required. Sources now embed concurrently.
 
 ---
 
@@ -117,19 +181,15 @@ Validated across 34 real queries (local pipeline, post all fixes):
 |--------|--------|
 | Quality: GOOD | **91%** (31/34 queries) |
 | Quality: POOR | 9% (3 niche/ambiguous queries) |
-| Avg sim score across chunks sent to LLM | **0.78** |
+| Avg similarity score (chunks to LLM) | **0.78** |
 | Typical end-to-end time | **~33 seconds** |
 | Timing breakdown | Rewrite 3.6s · Fetch+Embed ~14s · LLM 17.3s |
 | Wikipedia fetch success | 97% |
 | Web fetch success | **100%** |
-| YouTube fetch success | 97% |
 | ArXiv fetch success | 42%* |
 | Noise chunks reaching LLM | **Zero** across all 34 queries (sim floor = 0.65) |
 
 *ArXiv rate-limits cloud datacenter IPs. Hard 10s cap ensures fast responses contribute without dragging pipeline speed.
-
-
-
 
 ---
 
@@ -142,9 +202,11 @@ Validated across 34 real queries (local pipeline, post all fixes):
 | Embeddings | FastEmbed ONNX (`bge-small-en-v1.5`) | Thread-safe, no GIL issues, 2.2s avg |
 | Web search | Tavily API + DDG fallback | Tavily for news freshness; DDG for resilience |
 | ArXiv | Semantic Scholar REST + abstract fallback | No scraping, stable API, TLDR field |
-| YouTube | `youtube-transcript-api` | Caption extraction, no API quota cost |
-| Database | Supabase PostgreSQL | Query logs, user history, zero infra |
-| Rate limiting | slowapi (5 req/min per IP) | API key protection |
+| YouTube | `youtube-transcript-api` | Caption extraction (local only — blocked on EC2) |
+| Database | Supabase PostgreSQL | Query logs + daily summaries, zero infra |
+| Rate limiting | slowapi (5 req/min per IP) | Prevents abuse |
+| Deployment | AWS EC2 t3.small + Nginx + systemd | Persistent, auto-restarts on crash |
+| Monitoring | `monitoring/agent.py` + Gmail + Supabase `daily_summaries` | Nightly AI health report |
 
 ---
 
@@ -152,15 +214,39 @@ Validated across 34 real queries (local pipeline, post all fixes):
 
 ```
 app/
-├── main.py        # FastAPI app — SSE pipeline, rate limiting, Supabase logging
-├── pipeline.py    # Core RAG logic — fetch, chunk, embed, retrieve, prompt, LLM
-├── sources.py     # Four data fetchers with role configs and metadata tagging
-├── chunking.py    # Per-source chunking: hierarchical, atomic, semantic topic-shift
-└── static/        # Frontend — dark theme, typewriter streaming, expandable sources
+├── main.py           # FastAPI app — SSE pipeline, rate limiting, Supabase logging
+├── pipeline.py       # Core RAG logic — fetch, chunk, embed, retrieve, prompt, LLM
+├── sources.py        # Four data fetchers with role configs and metadata tagging
+├── chunking.py       # Per-source chunking: hierarchical, atomic, semantic topic-shift
+└── static/           # Frontend — dark theme, typewriter streaming, agent status cards
+    ├── index.html
+    ├── style.css
+    └── app.js
+
+monitoring/
+└── agent.py          # Nightly cron agent — metrics, failure fingerprinting, Gemini diagnosis, email
+
 requirements.txt
 render.yaml
-.python-version    # Pinned to 3.11.9
+.python-version       # Pinned to 3.11.9
 ```
+
+---
+
+## Deployment
+
+Running on **AWS EC2 t3.small** (2 vCPU, 2 GB RAM), ap-south-1 (Mumbai). Elastic IP `13.126.112.153`. Nginx reverse proxies port 80 → 8080. App managed by systemd — auto-restarts on crash.
+
+```
+Service : nexus-ai.service
+App dir : /home/ubuntu/Nexus-AI/
+Venv    : /home/ubuntu/Nexus-AI/venv
+Cron    : 0 1 * * * (monitoring agent — 1am UTC / 7am IST)
+```
+
+**Database:** Supabase PostgreSQL (free tier). Two tables:
+- `queries` — one row per query, 17 columns including timing percentiles, quality signal, per-source JSONB
+- `daily_summaries` — one row per day, written by monitoring agent after each nightly run
 
 ---
 
