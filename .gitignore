@@ -78,3 +78,8 @@ NEXUS_CODE_GUIDE.md
 
 # Separate experimental projects
 langgraph/
+
+# Buddy companion app — personal data, never commit
+companion/app/data/*
+!companion/app/data/.gitkeep
+!companion/app/data/profile.md.example

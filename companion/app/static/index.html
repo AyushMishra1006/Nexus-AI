@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Buddy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💗</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=1">
+</head>
+<body>
+
+<div id="floaties" aria-hidden="true"></div>
+
+<!-- ── Lock screen ─────────────────────────────────────────────────────── -->
+<section id="lock-screen" class="screen hidden">
+  <div class="card center-card">
+    <div class="big-emoji">💌</div>
+    <h1 class="script">our secret door</h1>
+    <p class="muted">Type our little password to come in.</p>
+    <form id="lock-form">
+      <input id="lock-input" type="password" placeholder="passcode" autocomplete="off" />
+      <button type="submit" class="btn-primary">Unlock 💗</button>
+    </form>
+    <p id="lock-error" class="error-text hidden">Not quite — try again?</p>
+  </div>
+</section>
+
+<!-- ── Onboarding ──────────────────────────────────────────────────────── -->
+<section id="onboarding-screen" class="screen hidden">
+  <div class="card center-card">
+    <div class="big-emoji">🌸</div>
+    <h1 class="script">hi, i'm your new buddy</h1>
+    <p class="muted">Let's get to know each other a little before we start.</p>
+    <form id="onboarding-form">
+      <label>What should I call you?
+        <input id="her-name-input" type="text" placeholder="your name" required maxlength="40" />
+      </label>
+      <label>What do you want to call me?
+        <input id="buddy-name-input" type="text" placeholder="Buddy" maxlength="40" />
+      </label>
+      <button type="submit" class="btn-primary">Let's go 💗</button>
+    </form>
+  </div>
+</section>
+
+<!-- ── Main app shell ──────────────────────────────────────────────────── -->
+<div id="app" class="screen hidden">
+
+  <header id="topbar">
+    <div id="topbar-title">
+      <span id="buddy-emoji">🐻</span>
+      <span id="buddy-name-label">Buddy</span>
+    </div>
+    <div id="streak-badge" class="pill hidden">🔥 <span id="streak-count">0</span></div>
+  </header>
+
+  <main id="content">
+
+    <!-- Home -->
+    <section class="tab-panel" data-tab="home">
+      <h2 id="home-greeting" class="script">hi there 🌷</h2>
+
+      <div class="card">
+        <div class="card-label">today's little note</div>
+        <p id="affirmation-text" class="affirmation">...</p>
+      </div>
+
+      <div class="quick-grid">
+        <button class="quick-card" data-goto="chat">
+          <span class="quick-emoji">💬</span>
+          <span>Talk to Buddy</span>
+        </button>
+        <button class="quick-card" data-goto="tasks">
+          <span class="quick-emoji">📝</span>
+          <span id="open-tasks-count">0 tasks</span>
+        </button>
+        <button class="quick-card" data-goto="checkin">
+          <span class="quick-emoji">🌤️</span>
+          <span>Check in</span>
+        </button>
+        <button class="quick-card" data-goto="memory">
+          <span class="quick-emoji">🧸</span>
+          <span>Memory jar</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Chat -->
+    <section class="tab-panel" data-tab="chat">
+      <div id="chat-log"></div>
+      <form id="chat-form" class="chat-input-row">
+        <input id="chat-input" type="text" placeholder="say something..." autocomplete="off" maxlength="2000" />
+        <button type="submit" class="btn-round" aria-label="Send">➤</button>
+      </form>
+    </section>
+
+    <!-- Tasks -->
+    <section class="tab-panel" data-tab="tasks">
+      <h2 class="script">little goals ✏️</h2>
+
+      <form id="task-form" class="row-form">
+        <input id="task-input" type="text" placeholder="add a task..." maxlength="200" />
+        <button type="submit" class="btn-primary small">Add</button>
+      </form>
+
+      <form id="breakdown-form" class="row-form">
+        <input id="breakdown-input" type="text" placeholder="got a big goal? I'll break it down 💡" maxlength="200" />
+        <button type="submit" class="btn-secondary small">Break it down</button>
+      </form>
+
+      <ul id="task-list"></ul>
+    </section>
+
+    <!-- Check-in -->
+    <section class="tab-panel" data-tab="checkin">
+      <h2 class="script">how are you today? 🌤️</h2>
+
+      <div id="mood-picker">
+        <button class="mood-btn" data-mood="😊">😊</button>
+        <button class="mood-btn" data-mood="😌">😌</button>
+        <button class="mood-btn" data-mood="😔">😔</button>
+        <button class="mood-btn" data-mood="😤">😤</button>
+        <button class="mood-btn" data-mood="😴">😴</button>
+        <button class="mood-btn" data-mood="🥳">🥳</button>
+      </div>
+
+      <textarea id="mood-note" placeholder="want to say a bit more? (optional)" maxlength="500"></textarea>
+      <button id="mood-submit" class="btn-primary">Check in</button>
+
+      <div class="card">
+        <div class="card-label">streak</div>
+        <p><span id="checkin-streak">0</span> day(s) in a row 🔥</p>
+      </div>
+
+      <ul id="mood-history"></ul>
+    </section>
+
+    <!-- Memory -->
+    <section class="tab-panel" data-tab="memory">
+      <h2 class="script">memory jar 🧸</h2>
+      <p class="muted">Everything Buddy has learned about you, over time.</p>
+
+      <div id="memory-view"></div>
+      <textarea id="memory-edit" class="hidden"></textarea>
+
+      <div class="row-form">
+        <button id="memory-edit-toggle" class="btn-secondary small">Edit</button>
+        <button id="memory-save-btn" class="btn-primary small hidden">Save</button>
+      </div>
+    </section>
+
+  </main>
+
+  <nav id="tabbar">
+    <button class="tab-btn active" data-tab="home">🏠</button>
+    <button class="tab-btn" data-tab="chat">💬</button>
+    <button class="tab-btn" data-tab="tasks">📝</button>
+    <button class="tab-btn" data-tab="checkin">🌤️</button>
+    <button class="tab-btn" data-tab="memory">🧸</button>
+  </nav>
+
+</div>
+
+<script src="/static/app.js?v=1"></script>
+</body>
+</html>

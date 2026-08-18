@@ -16,3 +16,15 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
     plan: free
+
+  - type: web
+    name: companion-buddy
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn companion.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: COMPANION_PASSCODE
+        sync: false
+    plan: free
