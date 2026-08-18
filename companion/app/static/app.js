@@ -30,28 +30,16 @@ async function api(path, options = {}) {
   return resp.json();
 }
 
-// ── Floating decor ─────────────────────────────────────────────────────────
-
-function spawnFloaties() {
-  const container = $('#floaties');
-  const emojis = ['💗', '✨', '🌸', '💌', '🎀'];
-  for (let i = 0; i < 14; i++) {
-    const span = document.createElement('span');
-    span.className = 'floaty';
-    span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-    span.style.left = `${Math.random() * 100}%`;
-    span.style.animationDuration = `${14 + Math.random() * 12}s`;
-    span.style.animationDelay = `${Math.random() * 14}s`;
-    span.style.fontSize = `${1 + Math.random() * 1.2}rem`;
-    container.appendChild(span);
-  }
+function timeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
 // ── Boot sequence ─────────────────────────────────────────────────────────
 
 async function boot() {
-  spawnFloaties();
-
   let locked = false;
   try {
     const status = await fetch('/api/lock-status').then((r) => r.json());
@@ -136,7 +124,7 @@ function showScreen(id) {
 
 function initApp() {
   $('#buddy-name-label').textContent = state.config.buddy_name;
-  $('#home-greeting').textContent = `hi ${state.config.her_name} 🌷`;
+  $('#home-greeting').textContent = `${timeGreeting()}, ${state.config.her_name}`;
 
   wireTabs();
   wireChat();
@@ -167,12 +155,12 @@ async function loadHome() {
   api('/api/affirmation').then((res) => {
     $('#affirmation-text').textContent = res.text;
   }).catch(() => {
-    $('#affirmation-text').textContent = "Buddy's still waking up — try again in a moment 💤";
+    $('#affirmation-text').textContent = "Buddy's still waking up — try again in a moment.";
   });
 
   api('/api/tasks').then((tasks) => {
     const open = tasks.filter((t) => !t.done).length;
-    $('#open-tasks-count').textContent = open === 1 ? '1 task' : `${open} tasks`;
+    $('#open-tasks-count').textContent = open === 1 ? '1 goal' : `${open} goals`;
   }).catch(() => {});
 
   api('/api/mood').then((res) => {
@@ -200,7 +188,7 @@ async function loadChatHistory() {
     const history = await api('/api/chat/history');
     $('#chat-log').innerHTML = '';
     if (!history.length) {
-      addBubble(`Hi ${state.config.her_name}! What's on your mind today? 💗`, 'buddy');
+      addBubble(`Hi ${state.config.her_name}. What's on your mind today?`, 'buddy');
       return;
     }
     history.forEach((turn) => addBubble(turn.text, turn.role === 'user' ? 'her' : 'buddy'));
@@ -369,9 +357,9 @@ async function loadMood() {
 }
 
 function wireCheckin() {
-  $all('.mood-btn').forEach((btn) => {
+  $all('.mood-chip').forEach((btn) => {
     btn.addEventListener('click', () => {
-      $all('.mood-btn').forEach((b) => b.classList.remove('selected'));
+      $all('.mood-chip').forEach((b) => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.moodSelected = btn.dataset.mood;
     });
@@ -379,7 +367,7 @@ function wireCheckin() {
 
   $('#mood-submit').addEventListener('click', async () => {
     if (!state.moodSelected) {
-      alert('Pick a mood first! 🌷');
+      alert('Pick how you\'re feeling first.');
       return;
     }
     const note = $('#mood-note').value.trim();
@@ -387,7 +375,7 @@ function wireCheckin() {
     $('#checkin-streak').textContent = res.streak;
     $('#mood-history').prepend(renderMoodEntry(res.entry));
     $('#mood-note').value = '';
-    $all('.mood-btn').forEach((b) => b.classList.remove('selected'));
+    $all('.mood-chip').forEach((b) => b.classList.remove('selected'));
     state.moodSelected = null;
     if (res.streak > 0) {
       $('#streak-badge').classList.remove('hidden');

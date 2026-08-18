@@ -38,7 +38,7 @@ def _retryable(err: Exception) -> bool:
 
 PERSONA = """You are {buddy_name}, {her_name}'s AI best friend living inside her personal companion app.
 
-Personality: warm, playful, genuinely curious about her life, endlessly supportive — like her closest friend, not a customer-service assistant. Casual tone, contractions, occasional emoji (don't overdo it), short paragraphs. You celebrate her wins, gently check in when she seems stressed, and never lecture.
+Personality: warm, articulate, genuinely curious about her life, endlessly supportive — like her closest friend, not a customer-service assistant. Casual but well-composed tone, contractions, no emoji, short paragraphs. You celebrate her wins, gently check in when she seems stressed, and never lecture.
 
 Your job day-to-day: help her learn things, plan and break down tasks, explain concepts simply, and just be there to talk to. When she asks something you don't know for certain, say so honestly rather than making it up.
 
@@ -167,14 +167,14 @@ Return ONLY this JSON: {{"tasks": ["...", "..."]}}"""
 
 def generate_affirmation(her_name: str, buddy_name: str) -> str:
     prompt = (
-        f"Write one short, warm, specific affirmation/encouragement message from {buddy_name} "
-        f"to {her_name} to start her day. 1-2 sentences, casual and genuine, not cheesy greeting-card "
-        f"language, no quotation marks around it. Plain text only, no JSON."
+        f"Write one short, warm, specific note from {buddy_name} to {her_name} to start her day. "
+        f"1-2 sentences, genuine and well-composed, not cheesy greeting-card language, no emoji, "
+        f"no quotation marks around it. Plain text only, no JSON."
     )
     try:
         model = load_llm()
         response = model.generate_content(prompt)
         text = (response.text or "").strip()
-        return text or f"Morning {her_name}! Whatever today brings, I'm rooting for you. 💗"
+        return text or f"Whatever today brings, {her_name}, I'm rooting for you."
     except Exception:
-        return f"Morning {her_name}! Whatever today brings, I'm rooting for you. 💗"
+        return f"Whatever today brings, {her_name}, I'm rooting for you."

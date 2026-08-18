@@ -4,44 +4,46 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Buddy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💗</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>♥</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
-
-<div id="floaties" aria-hidden="true"></div>
 
 <!-- ── Lock screen ─────────────────────────────────────────────────────── -->
 <section id="lock-screen" class="screen hidden">
   <div class="card center-card">
-    <div class="big-emoji">💌</div>
-    <h1 class="script">our secret door</h1>
-    <p class="muted">Type our little password to come in.</p>
+    <div class="mark">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    </div>
+    <h1 class="display">A private space</h1>
+    <p class="muted">Enter the passphrase to continue.</p>
     <form id="lock-form">
-      <input id="lock-input" type="password" placeholder="passcode" autocomplete="off" />
-      <button type="submit" class="btn-primary">Unlock 💗</button>
+      <input id="lock-input" type="password" placeholder="Passphrase" autocomplete="off" />
+      <button type="submit" class="btn-primary">Continue</button>
     </form>
-    <p id="lock-error" class="error-text hidden">Not quite — try again?</p>
+    <p id="lock-error" class="error-text hidden">That's not quite right — try again.</p>
   </div>
 </section>
 
 <!-- ── Onboarding ──────────────────────────────────────────────────────── -->
 <section id="onboarding-screen" class="screen hidden">
   <div class="card center-card">
-    <div class="big-emoji">🌸</div>
-    <h1 class="script">hi, i'm your new buddy</h1>
-    <p class="muted">Let's get to know each other a little before we start.</p>
+    <div class="mark">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 21s-7-4.6-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.4-9.5 9-9.5 9z"/></svg>
+    </div>
+    <h1 class="display">Welcome</h1>
+    <p class="muted">Before we begin, tell me a little about you.</p>
     <form id="onboarding-form">
       <label>What should I call you?
-        <input id="her-name-input" type="text" placeholder="your name" required maxlength="40" />
+        <input id="her-name-input" type="text" placeholder="Your name" required maxlength="40" />
       </label>
-      <label>What do you want to call me?
+      <label>What would you like to call me?
         <input id="buddy-name-input" type="text" placeholder="Buddy" maxlength="40" />
       </label>
-      <button type="submit" class="btn-primary">Let's go 💗</button>
+      <button type="submit" class="btn-primary">Begin</button>
     </form>
   </div>
 </section>
@@ -51,39 +53,41 @@
 
   <header id="topbar">
     <div id="topbar-title">
-      <span id="buddy-emoji">🐻</span>
-      <span id="buddy-name-label">Buddy</span>
+      <span class="display" id="buddy-name-label">Buddy</span>
     </div>
-    <div id="streak-badge" class="pill hidden">🔥 <span id="streak-count">0</span></div>
+    <div id="streak-badge" class="pill hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3c1 3-2 4-2 7a3 3 0 0 0 6 0c1.5 1 2 3 2 4.5A6.5 6.5 0 0 1 5 14.5C5 9 12 8 12 3z"/></svg>
+      <span id="streak-count">0</span>
+    </div>
   </header>
 
   <main id="content">
 
     <!-- Home -->
     <section class="tab-panel" data-tab="home">
-      <h2 id="home-greeting" class="script">hi there 🌷</h2>
+      <h2 id="home-greeting" class="display" style="font-size:1.9rem;margin:0 0 18px;">Welcome back</h2>
 
       <div class="card">
-        <div class="card-label">today's little note</div>
-        <p id="affirmation-text" class="affirmation">...</p>
+        <div class="card-label">A note for today</div>
+        <p id="affirmation-text" class="affirmation">…</p>
       </div>
 
       <div class="quick-grid">
         <button class="quick-card" data-goto="chat">
-          <span class="quick-emoji">💬</span>
-          <span>Talk to Buddy</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>
+          <span>Start a conversation</span>
         </button>
         <button class="quick-card" data-goto="tasks">
-          <span class="quick-emoji">📝</span>
-          <span id="open-tasks-count">0 tasks</span>
+          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="5" width="3" height="3" rx="0.5"/><rect x="4" y="11" width="3" height="3" rx="0.5"/><rect x="4" y="17" width="3" height="3" rx="0.5"/><path d="M10 6.5h10M10 12.5h10M10 18.5h10"/></svg>
+          <span id="open-tasks-count">0 goals</span>
         </button>
         <button class="quick-card" data-goto="checkin">
-          <span class="quick-emoji">🌤️</span>
-          <span>Check in</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+          <span>Daily check-in</span>
         </button>
         <button class="quick-card" data-goto="memory">
-          <span class="quick-emoji">🧸</span>
-          <span>Memory jar</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
+          <span>Memory</span>
         </button>
       </div>
     </section>
@@ -92,23 +96,25 @@
     <section class="tab-panel" data-tab="chat">
       <div id="chat-log"></div>
       <form id="chat-form" class="chat-input-row">
-        <input id="chat-input" type="text" placeholder="say something..." autocomplete="off" maxlength="2000" />
-        <button type="submit" class="btn-round" aria-label="Send">➤</button>
+        <input id="chat-input" type="text" placeholder="Write something..." autocomplete="off" maxlength="2000" />
+        <button type="submit" class="btn-round" aria-label="Send">
+          <svg class="icon" viewBox="0 0 24 24" style="stroke:white;width:17px;height:17px;"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+        </button>
       </form>
     </section>
 
     <!-- Tasks -->
     <section class="tab-panel" data-tab="tasks">
-      <h2 class="script">little goals ✏️</h2>
+      <div class="panel-heading"><h2 class="display">Goals</h2></div>
 
       <form id="task-form" class="row-form">
-        <input id="task-input" type="text" placeholder="add a task..." maxlength="200" />
+        <input id="task-input" type="text" placeholder="Add a goal..." maxlength="200" />
         <button type="submit" class="btn-primary small">Add</button>
       </form>
 
       <form id="breakdown-form" class="row-form">
-        <input id="breakdown-input" type="text" placeholder="got a big goal? I'll break it down 💡" maxlength="200" />
-        <button type="submit" class="btn-secondary small">Break it down</button>
+        <input id="breakdown-input" type="text" placeholder="A bigger goal? I'll break it down." maxlength="200" />
+        <button type="submit" class="btn-secondary small">Break down</button>
       </form>
 
       <ul id="task-list"></ul>
@@ -116,23 +122,24 @@
 
     <!-- Check-in -->
     <section class="tab-panel" data-tab="checkin">
-      <h2 class="script">how are you today? 🌤️</h2>
+      <div class="panel-heading"><h2 class="display">Check-in</h2></div>
+      <p class="muted" style="margin: -10px 0 16px;">How are you feeling today?</p>
 
       <div id="mood-picker">
-        <button class="mood-btn" data-mood="😊">😊</button>
-        <button class="mood-btn" data-mood="😌">😌</button>
-        <button class="mood-btn" data-mood="😔">😔</button>
-        <button class="mood-btn" data-mood="😤">😤</button>
-        <button class="mood-btn" data-mood="😴">😴</button>
-        <button class="mood-btn" data-mood="🥳">🥳</button>
+        <button class="mood-chip" data-mood="Good">Good</button>
+        <button class="mood-chip" data-mood="Calm">Calm</button>
+        <button class="mood-chip" data-mood="Low">Low</button>
+        <button class="mood-chip" data-mood="Tense">Tense</button>
+        <button class="mood-chip" data-mood="Tired">Tired</button>
+        <button class="mood-chip" data-mood="Celebrating">Celebrating</button>
       </div>
 
-      <textarea id="mood-note" placeholder="want to say a bit more? (optional)" maxlength="500"></textarea>
+      <textarea id="mood-note" placeholder="Anything you'd like to add? (optional)" maxlength="500"></textarea>
       <button id="mood-submit" class="btn-primary">Check in</button>
 
       <div class="card">
-        <div class="card-label">streak</div>
-        <p><span id="checkin-streak">0</span> day(s) in a row 🔥</p>
+        <div class="card-label">Streak</div>
+        <p style="margin:0;"><span id="checkin-streak">0</span> day(s) in a row</p>
       </div>
 
       <ul id="mood-history"></ul>
@@ -140,13 +147,13 @@
 
     <!-- Memory -->
     <section class="tab-panel" data-tab="memory">
-      <h2 class="script">memory jar 🧸</h2>
-      <p class="muted">Everything Buddy has learned about you, over time.</p>
+      <div class="panel-heading"><h2 class="display">Memory</h2></div>
+      <p class="muted" style="margin: -10px 0 16px;">What Buddy has learned about you, over time.</p>
 
       <div id="memory-view"></div>
       <textarea id="memory-edit" class="hidden"></textarea>
 
-      <div class="row-form">
+      <div class="row-form" style="margin-top:16px;">
         <button id="memory-edit-toggle" class="btn-secondary small">Edit</button>
         <button id="memory-save-btn" class="btn-primary small hidden">Save</button>
       </div>
@@ -155,15 +162,30 @@
   </main>
 
   <nav id="tabbar">
-    <button class="tab-btn active" data-tab="home">🏠</button>
-    <button class="tab-btn" data-tab="chat">💬</button>
-    <button class="tab-btn" data-tab="tasks">📝</button>
-    <button class="tab-btn" data-tab="checkin">🌤️</button>
-    <button class="tab-btn" data-tab="memory">🧸</button>
+    <button class="tab-btn active" data-tab="home">
+      <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg>
+      Home
+    </button>
+    <button class="tab-btn" data-tab="chat">
+      <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>
+      Chat
+    </button>
+    <button class="tab-btn" data-tab="tasks">
+      <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;"><rect x="4" y="5" width="3" height="3" rx="0.5"/><rect x="4" y="11" width="3" height="3" rx="0.5"/><rect x="4" y="17" width="3" height="3" rx="0.5"/><path d="M10 6.5h10M10 12.5h10M10 18.5h10"/></svg>
+      Goals
+    </button>
+    <button class="tab-btn" data-tab="checkin">
+      <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+      Check-in
+    </button>
+    <button class="tab-btn" data-tab="memory">
+      <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H12v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H12v16h6.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
+      Memory
+    </button>
   </nav>
 
 </div>
 
-<script src="/static/app.js?v=1"></script>
+<script src="/static/app.js?v=2"></script>
 </body>
 </html>
